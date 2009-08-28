@@ -1,0 +1,37 @@
+name:           ghc-core
+version:        0.5
+license:        BSD3
+license-file:   LICENSE
+author:         Don Stewart
+maintainer:     Don Stewart
+homepage:       http://code.haskell.org/~dons/code/ghc-core
+category:       Development
+synopsis:       Display GHC's core and assembly output in a pager
+description:    A convenient command line wrapper for GHC that displays
+                GHC's optimised core and assembly output in a human
+                readable, colourised manner, in a pager. Unix systems
+                only, currently.
+                .
+                Usage: 
+                .
+                > ghc-core A.hs
+                .
+                > ghc-core -fvia-C -optc-O3 A.hs
+                .
+                Screenshot: <http://galois.com/~dons/images/ghc-core.png>
+                .
+build-type:     Simple
+cabal-version:  >= 1.2
+
+-- Technically, hscolour-1.10.* will work too if we replace the
+-- 'NoLit' constructor with 'False' in the call to 'hscolour'.
+executable ghc-core
+    build-depends:  base,
+                    process >=1.0.1,
+                    pcre-light,
+                    colorize-haskell,
+                    directory,
+                    filepath
+    main-is:        ghc-core.hs
+    ghc-options:    -Wall
+    extensions:     PatternGuards
