@@ -23,7 +23,7 @@
 ------------------------------------------------------------------------
 
 import Control.Concurrent
-import Control.Exception
+import Control.OldException
 import Control.Monad
 import Data.List
 import Data.Maybe
@@ -35,7 +35,7 @@ import System.FilePath
 import System.IO
 import System.Process hiding (readProcess)
 import Text.Printf
-import qualified Control.Exception as C
+import qualified Control.OldException as C
 
 import Text.Regex.PCRE.Light.Char8
 
