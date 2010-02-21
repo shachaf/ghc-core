@@ -133,7 +133,7 @@ main = do
                         x <- readProcess "sh" ["-c","ls /tmp/ghc*/*.s | head -1"] []
                         case x of
                           Left _ -> return (strs', Nothing)
-                          Right s -> if "-fvia-C" `elem` args
+                          Right s -> if "-fvia-C" `elem` args || "-fllvm" `elem` args
                                        then do asm <- readFile (init s)
                                                return ((strs' ++ asm), Just $ takeDirectory s)
                                        else return (strs', Just $ takeDirectory s)
