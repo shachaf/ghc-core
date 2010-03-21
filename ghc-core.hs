@@ -59,6 +59,7 @@ data Options = Options
 --  , optFormat :: Output
   , optGhcExe :: String
   , optAsm    :: Bool
+  , optSyntax :: Bool
   } deriving (Eq, Show)
 
 defaultOptions :: Options
@@ -67,6 +68,7 @@ defaultOptions = Options
 --  , optFormat  = TTY
   , optGhcExe  = "ghc"
   , optAsm     = True
+  , optSyntax  = True
   }
 
 -- formats :: [(String, Output)]
@@ -86,6 +88,9 @@ options =
         ,Option [] ["no-asm"]
             (NoArg (\opts -> opts { optAsm = False }))
             "Don't output generated assembly code."
+        ,Option [] ["no-syntax"]
+            (NoArg (\opts -> opts { optSyntax = False }))
+            "Don't colorize generated code."
     ]
     where
 {-      fromString  f = fromMaybe (formatError f) (lookup f formats)
@@ -146,7 +151,8 @@ main = do
                 (optFormat opts)
                 colourPrefs False True NoLit [] strs
 -}
-    let nice = render ansiLight strs []
+    let nice | optSyntax opts = render ansiLight strs []
+             | otherwise      = strs
 
     bracket
         (openTempFile "/tmp" "ghc-core-XXXX.hcr")
