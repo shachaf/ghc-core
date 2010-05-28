@@ -60,6 +60,7 @@ data Options = Options
   , optGhcExe :: String
   , optAsm    :: Bool
   , optSyntax :: Bool
+  , optCast   :: Bool
   } deriving (Eq, Show)
 
 defaultOptions :: Options
@@ -69,6 +70,7 @@ defaultOptions = Options
   , optGhcExe  = "ghc"
   , optAsm     = True
   , optSyntax  = True
+  , optCast    = True
   }
 
 -- formats :: [(String, Output)]
@@ -91,6 +93,9 @@ options =
         ,Option [] ["no-syntax"]
             (NoArg (\opts -> opts { optSyntax = False }))
             "Don't colorize generated code."
+        ,Option [] ["no-cast"]
+            (NoArg (\opts -> opts { optCast = False }))
+            "Don't output calls to cast in generated code."
     ]
     where
 {-      fromString  f = fromMaybe (formatError f) (lookup f formats)
@@ -132,16 +137,19 @@ main = do
                                 contents <- readFile fp
                                 return (contents, Nothing)
                       _ -> do
-                        strs' <- polish `fmap` compileWithCore (optGhcExe opts)
+                        strs1 <- compileWithCore (optGhcExe opts)
                                  args (optAsm opts)
+                        let strs2 = polish strs1
+                        let strs3 | optCast opts = strs2
+                                  | otherwise    = castKill strs2
                     -- TODO this is a bit lazy on my part...
                         x <- readProcess "sh" ["-c","ls /tmp/ghc*/*.s | head -1"] []
                         case x of
-                          Left _ -> return (strs', Nothing)
+                          Left _ -> return (strs3, Nothing)
                           Right s -> if "-fvia-C" `elem` args || "-fllvm" `elem` args
                                        then do asm <- readFile (init s)
-                                               return ((strs' ++ asm), Just $ takeDirectory s)
-                                       else return (strs', Just $ takeDirectory s)
+                                               return ((strs3 ++ asm), Just $ takeDirectory s)
+                                       else return (strs3, Just $ takeDirectory s)
 
 {-
     -- If we replace the 'NoLit' constructor with 'False' (and
@@ -215,6 +223,20 @@ polish = unlines . dups . map polish' . lines
         dups []         = []
         dups ([]:[]:xs) = dups ([]:xs)
         dups (x:xs) = x : dups xs
+
+--
+-- Eliminate calls to infix cast from output.
+--
+castKill :: String -> String
+castKill ('`':'c':'a':'s':'t':'`':' ':'(':xs) = parenMunch 1 xs
+ where
+  parenMunch :: Int -> String -> String
+  parenMunch 0 xs       = castKill xs
+  parenMunch n (')':xs) = parenMunch (n-1) xs
+  parenMunch n ('(':xs) = parenMunch (n+1) xs
+  parenMunch n (_:xs)   = parenMunch n xs
+castKill (x:xs)                               = x : castKill xs
+castKill []                                   = []
 
 ------------------------------------------------------------------------
 
