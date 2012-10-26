@@ -1,4 +1,4 @@
-{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE PatternGuards, ScopedTypeVariables #-}
 --------------------------------------------------------------------
 -- |
 -- Module    : ghc-core
@@ -23,10 +23,8 @@
 ------------------------------------------------------------------------
 
 import Control.Concurrent
-import Control.OldException
+import Control.Exception
 import Control.Monad
-import Data.List
-import Data.Maybe
 import System.Console.GetOpt
 import System.Directory
 import System.Environment
@@ -35,7 +33,6 @@ import System.FilePath
 import System.IO
 import System.Process hiding (readProcess)
 import Text.Printf
-import qualified Control.OldException as C
 
 import Text.Regex.PCRE.Light.Char8
 
@@ -242,7 +239,7 @@ castKill []                                   = []
 
 compileWithCore :: String -> [String] -> Bool -> IO String
 compileWithCore ghc opts asm = do
-    let args = words $ "-O2 -keep-tmp-files -ddump-simpl -ddump-simpl-stats -no-recomp --make" ++ if asm then " -ddump-asm" else ""
+    let args = words $ "-O2 -keep-tmp-files -ddump-simpl -ddump-simpl-stats -fforce-recomp --make" ++ if asm then " -ddump-asm" else ""
 
     x <- readProcess ghc (args ++ opts) []
     case x of
@@ -264,21 +261,21 @@ readProcess :: FilePath                              -- ^ command to run
             -> String                                -- ^ standard input
             -> IO (Either (ExitCode,String,String) String)  -- ^ either the stdout, or an exitcode and any output
 
-readProcess cmd args input = C.handle (return . handler) $ do
+readProcess cmd args input = handle (return . Left . handler) $ do
     (inh,outh,errh,pid) <- runInteractiveProcess cmd args Nothing Nothing
 
     output  <- hGetContents outh
     outMVar <- newEmptyMVar
-    forkIO $ (C.evaluate (length output) >> putMVar outMVar ())
+    forkIO $ (evaluate (length output) >> putMVar outMVar ())
 
     errput  <- hGetContents errh
     errMVar <- newEmptyMVar
-    forkIO $ (C.evaluate (length errput) >> putMVar errMVar ())
+    forkIO $ (evaluate (length errput) >> putMVar errMVar ())
 
     when (not (null input)) $ hPutStr inh input
     takeMVar outMVar
     takeMVar errMVar
-    ex     <- C.catch (waitForProcess pid) (\_e -> return ExitSuccess)
+    ex     <- catch (waitForProcess pid) (\(_::SomeException) -> return ExitSuccess)
     hClose outh
     hClose inh          -- done with stdin
     hClose errh         -- ignore stderr
@@ -288,10 +285,12 @@ readProcess cmd args input = C.handle (return . handler) $ do
         ExitFailure _ -> Left (ex, errput, output)
 
   where
-    handler (C.ExitException e) = Left (e,"","")
-    handler e                   = Left (ExitFailure 1, show e, "")
+    handler :: SomeException -> (ExitCode,String,String)
+    handler ex
+        | Just (e::ExitCode) <- fromException ex = (e,"","")
+        | otherwise                              = (ExitFailure 1, show ex, "")
 
 
 -- Safe wrapper for getEnv
 getEnvMaybe :: String -> IO (Maybe String)
-getEnvMaybe name = handle (const $ return Nothing) (Just `fmap` getEnv name)
+getEnvMaybe name = handle (\(_::SomeException) -> return Nothing) (Just `fmap` getEnv name)
