@@ -23,7 +23,7 @@
 ------------------------------------------------------------------------
 
 import Control.Concurrent
-import Control.Exception
+import Control.Exception as E
 import Control.Monad
 import System.Console.GetOpt
 import System.Directory
@@ -275,7 +275,7 @@ readProcess cmd args input = handle (return . Left . handler) $ do
     when (not (null input)) $ hPutStr inh input
     takeMVar outMVar
     takeMVar errMVar
-    ex     <- catch (waitForProcess pid) (\(_::SomeException) -> return ExitSuccess)
+    ex     <- E.catch (waitForProcess pid) (\(_::SomeException) -> return ExitSuccess)
     hClose outh
     hClose inh          -- done with stdin
     hClose errh         -- ignore stderr
