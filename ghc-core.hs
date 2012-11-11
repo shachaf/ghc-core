@@ -101,41 +101,27 @@ main = do
     (opts, args) <- getArgs >>= parseOptions
 
     mv <- getEnvMaybe "PAGER"
-    let less = case mv of Just s -> case s of "less" -> "less -f" ; _ -> s
-                          _      -> "less -f"
+    let pager = fromMaybe "less" mv
+        pagerOpts = if pager == "less" then ["-f"] else []
 
-    (strs, tmps) <- case args of
-                      [fp] | isExtCoreFile fp -> do
-                                contents <- readFile fp
-                                return (contents, Nothing)
-                      _ -> do
-                        strs1 <- compileWithCore (optGhcExe opts)
-                                 args (optAsm opts) (not (optCast opts))
-                        let strs2 = polish strs1
-                    -- TODO this is a bit lazy on my part...
-                        x <- readProcessWithExitCode "sh" ["-c","ls /tmp/ghc*/*.s | head -1"] []
-                        case x of
-                          (ExitFailure _, _, _) -> return (strs2, Nothing)
-                          (ExitSuccess  , s, _)
-                            | any (`elem` args) ["-fvia-C", "-fllvm"]
-                                        -> do asm <- readFile (init s)
-                                              return ((strs2 ++ asm), Just $ takeDirectory s)
-                            | otherwise -> return (strs2, Just $ takeDirectory s)
+    strs <- case args of
+        [fp] | isExtCoreFile fp -> do
+            contents <- readFile fp
+            return contents
+        _ -> do
+            strs1 <- compileWithCore (optGhcExe opts)
+                        args (optAsm opts) (not (optCast opts))
+            return (polish strs1)
 
     let nice | optSyntax opts = render ansiLight strs []
              | otherwise      = strs
 
     bracket
         (openTempFile "/tmp" "ghc-core-XXXX.hcr")
-        (\(f,h) -> do hClose h
-                      removeFile f
-                      case tmps of
-                        Just g -> system ("rm -rf " ++ g) >> return ()
-                        _      -> return ()
-        )
+        (\(f,h) -> hClose h >> removeFile f)
         (\(f,h) -> do
             hPutStrLn h nice >> hFlush h
-            e <- system $ less ++ " -r " ++ f
+            e <- rawSystem pager (pagerOpts ++ ["-r",  f])
             exitWith e)
 
 --
@@ -180,7 +166,8 @@ polish = unlines . dups . map polish' . lines
 
 compileWithCore :: String -> [String] -> Bool -> Bool -> IO String
 compileWithCore ghc opts asm suppressCasts = do
-    let args = words "-O2 -keep-tmp-files -ddump-simpl -ddump-simpl-stats -fforce-recomp --make"
+    -- TODO: Show generated assembly for -fllvm (previously implemented with -keep-tmp-files)
+    let args = words "-O2 -ddump-simpl -ddump-simpl-stats -fforce-recomp --make"
                 ++ (if asm then ["-ddump-asm"] else [])
                 ++ (if suppressCasts then ["-dsuppress-coercions"] else [])
 
