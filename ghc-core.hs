@@ -100,10 +100,6 @@ main = do
     -- Parse command line
     (opts, args) <- getArgs >>= parseOptions
 
-    mv <- getEnvMaybe "PAGER"
-    let pager = fromMaybe "less" mv
-        pagerOpts = if pager == "less" then ["-f"] else []
-
     code <- case args of
         [fp] | isExtCoreFile fp -> readFile fp
         _ -> do
@@ -118,8 +114,15 @@ main = do
         (\(f,h) -> hClose h >> removeFile f)
         (\(f,h) -> do
             hPutStrLn h niceCode >> hFlush h
-            e <- rawSystem pager (pagerOpts ++ ["-r",  f])
+            e <-showInPager f
             exitWith e)
+
+showInPager :: FilePath -> IO ExitCode
+showInPager file = do
+    mv <- getEnvMaybe "PAGER"
+    let pager = fromMaybe "less" mv
+        pagerOpts = if pager == "less" then ["-f", "-r"] else []
+    rawSystem pager (pagerOpts ++ [file])
 
 --
 -- Clean up the output with some regular expressions.
