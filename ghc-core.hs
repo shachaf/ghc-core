@@ -24,6 +24,7 @@
 
 import Control.Applicative
 import Control.Exception as E
+import Data.Maybe
 import System.Console.GetOpt
 import System.Directory
 import System.Environment
@@ -176,20 +177,10 @@ polish = unlines . dups . map polish' . lines
     where
         polish' [] = []
         polish' s
-            | Just [_,a,b] <- match name  s [] =  polish' (a ++ b)
-            | Just [_,a,b] <- match local s [] =  polish' (a ++ b)
-            | Just _ <- match core  s [] =  "------------------------------- Core -----------------------------------"
-            | Just _ <- match asm   s [] =  "------------------------------- Assembly -------------------------------"
-
-            | Just _       <- match junk  s [] =  []
-            | Just _       <- match junk2 s [] =  []
-            | Just _       <- match junk3 s [] =  []
-            | Just _       <- match junk4 s [] =  []
-            | Just _       <- match junk5 s [] =  []
-            | Just _       <- match junk6 s [] =  []
-            | Just _       <- match junk7 s [] =  []
-
-            | otherwise = s
+            | Just [_,a,b] <- match name  s [] = polish' (a ++ b)
+            | Just [_,a,b] <- match local s [] = polish' (a ++ b)
+            | isJunk s                         = ""
+            | otherwise                        = s
 
         -- simplify some qualified names
         name  = compile
@@ -200,17 +191,16 @@ polish = unlines . dups . map polish' . lines
                  "^(.*)Main\\.(.*)$"
                  [ungreedy]
 
-        -- remove boring things
-        core  = compile "Tidy Core" [ungreedy]
-        asm   = compile "Asm code" [ungreedy]
+        isJunk s = any (\r -> isJust (match r s [])) junks
 
-        junk  = compile "^.GlobalId" []
-        junk2 = compile "^.Arity .*" []
-        junk3 = compile "^Rec {|^end Rec" []
-        junk4 = compile "DmdType" []
-        junk5 = compile "NoCafRefs" []
-        junk6 = compile "^\\[\\]$" []
-        junk7 = compile "==========" []
+        junks  = map (\r -> compile r [])
+                    [ "^.GlobalId"
+                    , "^.Arity .*"
+                    , "^Rec {|^end Rec"
+                    , "DmdType"
+                    , "NoCafRefs"
+                    , "^\\[\\]$"
+                    ]
 
         -- remove duplicate blank lines
         dups []         = []

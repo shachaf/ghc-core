@@ -31,4 +31,4 @@ executable ghc-core
                     directory,
                     filepath
     main-is:        ghc-core.hs
-    ghc-options:    -Wall
+    ghc-options:    -Wall -O2
