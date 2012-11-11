@@ -78,7 +78,6 @@ options =
          (NoArg (\opts -> opts { optCast = False }))
          "Don't output calls to cast in generated code."
     ]
-    where
 
 parseOptions :: [String] -> IO (Options, [String])
 parseOptions argv =
@@ -89,7 +88,8 @@ parseOptions argv =
                                     exitWith ExitSuccess
                             else return (o', n)
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
-    where header = "Usage: ghc-core [OPTION...] [--] [GHC_OPTION...] [files...]"
+  where
+    header = "Usage: ghc-core [OPTION...] [--] [GHC_OPTION...] [files...]"
 
 isExtCoreFile :: FilePath -> Bool
 isExtCoreFile = (== ".hcr") . takeExtension
@@ -107,8 +107,7 @@ main = do
     code <- case args of
         [fp] | isExtCoreFile fp -> readFile fp
         _ -> do
-            strs <- compileWithCore (optGhcExe opts)
-                        args (optAsm opts) (not (optCast opts))
+            strs <- compileWithCore opts args
             return (polish strs)
 
     let niceCode | optSyntax opts = render ansiLight code []
@@ -162,14 +161,16 @@ polish = unlines . dups . map polish' . lines
 
 ------------------------------------------------------------------------
 
-compileWithCore :: String -> [String] -> Bool -> Bool -> IO String
-compileWithCore ghc opts asm suppressCasts = do
-    -- TODO: Show generated assembly for -fllvm (previously implemented with -keep-tmp-files)
-    let args = words "-O2 -ddump-simpl -ddump-simpl-stats -fforce-recomp --make"
-                ++ (if asm then ["-ddump-asm"] else [])
-                ++ (if suppressCasts then ["-dsuppress-coercions"] else [])
+compileWithCore :: Options -> [String] -> IO String
+compileWithCore opts args = do
+    -- TODO: Show generated assembly for -fllvm (previously implemented with
+    -- -keep-tmp-files)
+    -- TODO: Does -ddump-simpl-stats belong here?
+    let defaultArgs = words "-O2 -ddump-simpl -fforce-recomp --make"
+                   ++ (if optAsm opts then ["-ddump-asm"] else [])
+                   ++ (if optCast opts then [] else ["-dsuppress-coercions"])
 
-    x <- readProcessWithExitCode ghc (args ++ opts) []
+    x <- readProcessWithExitCode (optGhcExe opts) (defaultArgs ++ args) []
     case x of
          (err@(ExitFailure _),str,std) -> do
             mapM_ putStrLn (lines str)
