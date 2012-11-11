@@ -29,7 +29,6 @@ executable ghc-core
                     pcre-light,
                     colorize-haskell,
                     directory,
-                    filepath,
-                    spawn
+                    filepath
     main-is:        ghc-core.hs
     ghc-options:    -Wall

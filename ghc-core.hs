@@ -23,16 +23,14 @@
 ------------------------------------------------------------------------
 
 import Control.Applicative
-import Control.Concurrent.Spawn
 import Control.Exception as E
-import Control.Monad
 import System.Console.GetOpt
 import System.Directory
 import System.Environment
 import System.Exit
 import System.FilePath
 import System.IO
-import System.Process hiding (readProcess)
+import System.Process
 
 import Text.Regex.PCRE.Light.Char8
 
@@ -138,10 +136,10 @@ main = do
                                  args (optAsm opts) (not (optCast opts))
                         let strs2 = polish strs1
                     -- TODO this is a bit lazy on my part...
-                        x <- readProcess "sh" ["-c","ls /tmp/ghc*/*.s | head -1"] []
+                        x <- readProcessWithExitCode "sh" ["-c","ls /tmp/ghc*/*.s | head -1"] []
                         case x of
-                          Left _ -> return (strs2, Nothing)
-                          Right s -> if "-fvia-C" `elem` args || "-fllvm" `elem` args
+                          (ExitFailure _, _, _) -> return (strs2, Nothing)
+                          (ExitSuccess  , s, _) -> if "-fvia-C" `elem` args || "-fllvm" `elem` args
                                        then do asm <- readFile (init s)
                                                return ((strs2 ++ asm), Just $ takeDirectory s)
                                        else return (strs2, Just $ takeDirectory s)
@@ -227,51 +225,17 @@ compileWithCore ghc opts asm suppressCasts = do
                 ++ (if asm then ["-ddump-asm"] else [])
                 ++ (if suppressCasts then ["-dsuppress-coercions"] else [])
 
-    x <- readProcess ghc (args ++ opts) []
+    x <- readProcessWithExitCode ghc (args ++ opts) []
     case x of
-         Left (err,str,std) -> do
+         (err@(ExitFailure _),str,std) -> do
             mapM_ putStrLn (lines str)
             mapM_ putStrLn (lines std)
             hPutStrLn stderr ("GHC failed to compile " ++ show err)
             exitWith (ExitFailure 1) -- fatal
 
-         Right str      -> return str
+         (ExitSuccess, str, _)      -> return str
 
 ------------------------------------------------------------------------
-
---
--- Strict process reading
---
-readProcess :: FilePath                              -- ^ command to run
-            -> [String]                              -- ^ any arguments
-            -> String                                -- ^ standard input
-            -> IO (Either (ExitCode,String,String) String)  -- ^ either the stdout, or an exitcode and any output
-
-readProcess cmd args input = handle (return . Left . handler) $ do
-    (inh,outh,errh,pid) <- runInteractiveProcess cmd args Nothing Nothing
-
-    output  <- hGetContents outh
-    errput  <- hGetContents errh
-
-    hPutStr inh input
-
-    parMapIO_ (evaluate . length) [output, errput]
-
-    ex <- E.catch (waitForProcess pid) (\(_::SomeException) -> return ExitSuccess)
-    hClose outh
-    hClose inh          -- done with stdin
-    hClose errh         -- ignore stderr
-
-    return $ case ex of
-        ExitSuccess   -> Right output
-        ExitFailure _ -> Left (ex, errput, output)
-
-  where
-    handler :: SomeException -> (ExitCode,String,String)
-    handler ex
-        | Just (e::ExitCode) <- fromException ex = (e,"","")
-        | otherwise                              = (ExitFailure 1, show ex, "")
-
 
 -- Safe wrapper for getEnv
 getEnvMaybe :: String -> IO (Maybe String)
