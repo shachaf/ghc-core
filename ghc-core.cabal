@@ -12,7 +12,7 @@ description:    A convenient command line wrapper for GHC that displays
                 readable, colourised manner, in a pager. Unix systems
                 only, currently.
                 .
-                Usage: 
+                Usage:
                 .
                 > ghc-core A.hs
                 .
@@ -21,8 +21,6 @@ description:    A convenient command line wrapper for GHC that displays
 build-type:     Simple
 cabal-version:  >= 1.2
 
--- Technically, hscolour-1.10.* will work too if we replace the
--- 'NoLit' constructor with 'False' in the call to 'hscolour'.
 executable ghc-core
     build-depends:  base >= 4 && < 5,
                     process >=1.0.1,

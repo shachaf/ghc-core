@@ -38,13 +38,6 @@ import Text.Regex.PCRE.Light.Char8
 -- BSD-licensed Haskell syntax highlighting, based on Programmatica
 import Language.Haskell.Colorize
 
-{-
-import Language.Haskell.HsColour
-import Language.Haskell.HsColour.Colourise
--- 'Literate' is hscolour-1.11 only. 'Bool' was used in hscolour-1.10
-import Language.Haskell.HsColour.Options (Literate(..))
--}
-
 ------------------------------------------------------------------------
 --
 -- Command line parsing
@@ -52,7 +45,6 @@ import Language.Haskell.HsColour.Options (Literate(..))
 
 data Options = Options
   { optHelp   :: Bool
---  , optFormat :: Output
   , optGhcExe :: String
   , optAsm    :: Bool
   , optSyntax :: Bool
@@ -62,44 +54,31 @@ data Options = Options
 defaultOptions :: Options
 defaultOptions = Options
   { optHelp    = False
---  , optFormat  = TTY
   , optGhcExe  = "ghc"
   , optAsm     = True
   , optSyntax  = True
   , optCast    = True
   }
 
--- formats :: [(String, Output)]
--- formats = [("css", CSS), ("html", HTML), ("tty", TTY)]
-
 options :: [OptDescr (Options -> Options)]
 options =
-    [ --  Option ['f'] ["format"]
-      --      (ReqArg (\x opts -> opts { optFormat = fromString x }) "FORMAT")
-      --      ("Output format " ++ formats' ++ ".")
-         Option ['h'] ["help"]
-            (NoArg (\opts -> opts { optHelp = True }))
-            "Print this help message."
-        ,Option [] ["with-ghc"]
-            (ReqArg (\x opts -> opts { optGhcExe = x }) "PROGRAM")
-            "Ghc executable to use."
-        ,Option [] ["no-asm"]
-            (NoArg (\opts -> opts { optAsm = False }))
-            "Don't output generated assembly code."
-        ,Option [] ["no-syntax"]
-            (NoArg (\opts -> opts { optSyntax = False }))
-            "Don't colorize generated code."
-        ,Option [] ["no-cast"]
-            (NoArg (\opts -> opts { optCast = False }))
-            "Don't output calls to cast in generated code."
+    [ Option ['h'] ["help"]
+         (NoArg (\opts -> opts { optHelp = True }))
+         "Print this help message."
+    , Option [] ["with-ghc"]
+         (ReqArg (\x opts -> opts { optGhcExe = x }) "PROGRAM")
+         "Ghc executable to use."
+    , Option [] ["no-asm"]
+         (NoArg (\opts -> opts { optAsm = False }))
+         "Don't output generated assembly code."
+    , Option [] ["no-syntax"]
+         (NoArg (\opts -> opts { optSyntax = False }))
+         "Don't colorize generated code."
+    , Option [] ["no-cast"]
+         (NoArg (\opts -> opts { optCast = False }))
+         "Don't output calls to cast in generated code."
     ]
     where
-{-      fromString  f = fromMaybe (formatError f) (lookup f formats)
-        formatError f = error $
-                            "invalid format `" ++ f ++ "'"
-                            ++ ", must be one of " ++ formats' ++ "."
-        formats' = "(" ++ concat (intersperse ", " (map fst formats)) ++ ")"
--}
 
 parseOptions :: [String] -> IO (Options, [String])
 parseOptions argv =
@@ -121,9 +100,6 @@ main = do
     -- Parse command line
     (opts, args) <- getArgs >>= parseOptions
 
-    -- Read colors from .hscolour
---    colourPrefs <- readColourPrefs
-
     mv <- getEnvMaybe "PAGER"
     let less = case mv of Just s -> case s of "less" -> "less -f" ; _ -> s
                           _      -> "less -f"
@@ -140,19 +116,12 @@ main = do
                         x <- readProcessWithExitCode "sh" ["-c","ls /tmp/ghc*/*.s | head -1"] []
                         case x of
                           (ExitFailure _, _, _) -> return (strs2, Nothing)
-                          (ExitSuccess  , s, _) -> if "-fvia-C" `elem` args || "-fllvm" `elem` args
-                                       then do asm <- readFile (init s)
-                                               return ((strs2 ++ asm), Just $ takeDirectory s)
-                                       else return (strs2, Just $ takeDirectory s)
+                          (ExitSuccess  , s, _)
+                            | any (`elem` args) ["-fvia-C", "-fllvm"]
+                                        -> do asm <- readFile (init s)
+                                              return ((strs2 ++ asm), Just $ takeDirectory s)
+                            | otherwise -> return (strs2, Just $ takeDirectory s)
 
-{-
-    -- If we replace the 'NoLit' constructor with 'False' (and
-    -- remove the include for the Literate type), then this will
-    -- work with older hscolour-1.10.* versions.
-    let nice = hscolour
-                (optFormat opts)
-                colourPrefs False True NoLit [] strs
--}
     let nice | optSyntax opts = render ansiLight strs []
              | otherwise      = strs
 
