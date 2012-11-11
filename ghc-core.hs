@@ -17,12 +17,13 @@
 --
 -- > ghc-core zipwith
 --
--- > ghc-core -fvia-C zipwith 
+-- > ghc-core -fvia-C zipwith
 --
 
 ------------------------------------------------------------------------
 
-import Control.Concurrent
+import Control.Applicative
+import Control.Concurrent.Spawn
 import Control.Exception as E
 import Control.Monad
 import System.Console.GetOpt
@@ -32,7 +33,6 @@ import System.Exit
 import System.FilePath
 import System.IO
 import System.Process hiding (readProcess)
-import Text.Printf
 
 import Text.Regex.PCRE.Light.Char8
 
@@ -103,7 +103,7 @@ options =
 -}
 
 parseOptions :: [String] -> IO (Options, [String])
-parseOptions argv = 
+parseOptions argv =
     case getOpt RequireOrder options argv of
         (o, n, []) -> let o' = foldl (flip ($)) defaultOptions o in
                         if optHelp o'
@@ -128,25 +128,23 @@ main = do
     mv <- getEnvMaybe "PAGER"
     let less = case mv of Just s -> case s of "less" -> "less -f" ; _ -> s
                           _      -> "less -f"
- 
+
     (strs, tmps) <- case args of
                       [fp] | isExtCoreFile fp -> do
                                 contents <- readFile fp
                                 return (contents, Nothing)
                       _ -> do
                         strs1 <- compileWithCore (optGhcExe opts)
-                                 args (optAsm opts)
+                                 args (optAsm opts) (not (optCast opts))
                         let strs2 = polish strs1
-                        let strs3 | optCast opts = strs2
-                                  | otherwise    = castKill strs2
                     -- TODO this is a bit lazy on my part...
                         x <- readProcess "sh" ["-c","ls /tmp/ghc*/*.s | head -1"] []
                         case x of
-                          Left _ -> return (strs3, Nothing)
+                          Left _ -> return (strs2, Nothing)
                           Right s -> if "-fvia-C" `elem` args || "-fllvm" `elem` args
                                        then do asm <- readFile (init s)
-                                               return ((strs3 ++ asm), Just $ takeDirectory s)
-                                       else return (strs3, Just $ takeDirectory s)
+                                               return ((strs2 ++ asm), Just $ takeDirectory s)
+                                       else return (strs2, Just $ takeDirectory s)
 
 {-
     -- If we replace the 'NoLit' constructor with 'False' (and
@@ -172,9 +170,9 @@ main = do
             e <- system $ less ++ " -r " ++ f
             exitWith e)
 
---  
--- Clean up the output with some regular expressions.  
---  
+--
+-- Clean up the output with some regular expressions.
+--
 polish :: String -> String
 polish = unlines . dups . map polish' . lines
     where
@@ -221,32 +219,20 @@ polish = unlines . dups . map polish' . lines
         dups ([]:[]:xs) = dups ([]:xs)
         dups (x:xs) = x : dups xs
 
---
--- Eliminate calls to infix cast from output.
---
-castKill :: String -> String
-castKill ('`':'c':'a':'s':'t':'`':' ':'(':xs) = parenMunch 1 xs
- where
-  parenMunch :: Int -> String -> String
-  parenMunch 0 xs       = castKill xs
-  parenMunch n (')':xs) = parenMunch (n-1) xs
-  parenMunch n ('(':xs) = parenMunch (n+1) xs
-  parenMunch n (_:xs)   = parenMunch n xs
-castKill (x:xs)                               = x : castKill xs
-castKill []                                   = []
-
 ------------------------------------------------------------------------
 
-compileWithCore :: String -> [String] -> Bool -> IO String
-compileWithCore ghc opts asm = do
-    let args = words $ "-O2 -keep-tmp-files -ddump-simpl -ddump-simpl-stats -fforce-recomp --make" ++ if asm then " -ddump-asm" else ""
+compileWithCore :: String -> [String] -> Bool -> Bool -> IO String
+compileWithCore ghc opts asm suppressCasts = do
+    let args = words "-O2 -keep-tmp-files -ddump-simpl -ddump-simpl-stats -fforce-recomp --make"
+                ++ (if asm then ["-ddump-asm"] else [])
+                ++ (if suppressCasts then ["-dsuppress-coercions"] else [])
 
     x <- readProcess ghc (args ++ opts) []
     case x of
          Left (err,str,std) -> do
             mapM_ putStrLn (lines str)
             mapM_ putStrLn (lines std)
-            printf "GHC failed to compile %s\n" (show err)
+            hPutStrLn stderr ("GHC failed to compile " ++ show err)
             exitWith (ExitFailure 1) -- fatal
 
          Right str      -> return str
@@ -254,7 +240,7 @@ compileWithCore ghc opts asm = do
 ------------------------------------------------------------------------
 
 --
--- Strict process reading 
+-- Strict process reading
 --
 readProcess :: FilePath                              -- ^ command to run
             -> [String]                              -- ^ any arguments
@@ -265,17 +251,13 @@ readProcess cmd args input = handle (return . Left . handler) $ do
     (inh,outh,errh,pid) <- runInteractiveProcess cmd args Nothing Nothing
 
     output  <- hGetContents outh
-    outMVar <- newEmptyMVar
-    forkIO $ (evaluate (length output) >> putMVar outMVar ())
-
     errput  <- hGetContents errh
-    errMVar <- newEmptyMVar
-    forkIO $ (evaluate (length errput) >> putMVar errMVar ())
 
-    when (not (null input)) $ hPutStr inh input
-    takeMVar outMVar
-    takeMVar errMVar
-    ex     <- E.catch (waitForProcess pid) (\(_::SomeException) -> return ExitSuccess)
+    hPutStr inh input
+
+    parMapIO_ (evaluate . length) [output, errput]
+
+    ex <- E.catch (waitForProcess pid) (\(_::SomeException) -> return ExitSuccess)
     hClose outh
     hClose inh          -- done with stdin
     hClose errh         -- ignore stderr
@@ -293,4 +275,4 @@ readProcess cmd args input = handle (return . Left . handler) $ do
 
 -- Safe wrapper for getEnv
 getEnvMaybe :: String -> IO (Maybe String)
-getEnvMaybe name = handle (\(_::SomeException) -> return Nothing) (Just `fmap` getEnv name)
+getEnvMaybe name = handle (\(_::SomeException) -> return Nothing) (Just <$> getEnv name)

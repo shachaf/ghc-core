@@ -29,7 +29,7 @@ executable ghc-core
                     pcre-light,
                     colorize-haskell,
                     directory,
-                    filepath
+                    filepath,
+                    spawn
     main-is:        ghc-core.hs
     ghc-options:    -Wall
-    extensions:     PatternGuards
