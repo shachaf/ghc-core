@@ -1,10 +1,10 @@
 name:           ghc-core
-version:        0.5.4
+version:        0.5.5
 license:        BSD3
 license-file:   LICENSE
 author:         Don Stewart
-maintainer:     Don Stewart
-homepage:       http://code.haskell.org/~dons/code/ghc-core
+maintainer:     shachaf@gmail.com
+homepage:       https://github.com/shachaf/ghc-core
 category:       Development
 synopsis:       Display GHC's core and assembly output in a pager
 description:    A convenient command line wrapper for GHC that displays
@@ -17,8 +17,6 @@ description:    A convenient command line wrapper for GHC that displays
                 > ghc-core A.hs
                 .
                 > ghc-core -fvia-C -optc-O3 A.hs
-                .
-                Screenshot: <http://galois.com/~dons/images/ghc-core.png>
                 .
 build-type:     Simple
 cabal-version:  >= 1.2
