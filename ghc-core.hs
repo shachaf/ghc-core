@@ -65,7 +65,7 @@ options =
     [ Option ['h'] ["help"]
          (NoArg (\opts -> opts { optHelp = True }))
          "Print this help message."
-    , Option [] ["with-ghc"]
+    , Option ['w'] ["with-ghc"]
          (ReqArg (\x opts -> opts { optGhcExe = x }) "PROGRAM")
          "Ghc executable to use."
     , Option [] ["no-asm"]
@@ -104,23 +104,21 @@ main = do
     let pager = fromMaybe "less" mv
         pagerOpts = if pager == "less" then ["-f"] else []
 
-    strs <- case args of
-        [fp] | isExtCoreFile fp -> do
-            contents <- readFile fp
-            return contents
+    code <- case args of
+        [fp] | isExtCoreFile fp -> readFile fp
         _ -> do
-            strs1 <- compileWithCore (optGhcExe opts)
+            strs <- compileWithCore (optGhcExe opts)
                         args (optAsm opts) (not (optCast opts))
-            return (polish strs1)
+            return (polish strs)
 
-    let nice | optSyntax opts = render ansiLight strs []
-             | otherwise      = strs
+    let niceCode | optSyntax opts = render ansiLight code []
+                 | otherwise      = code
 
     bracket
         (openTempFile "/tmp" "ghc-core-XXXX.hcr")
         (\(f,h) -> hClose h >> removeFile f)
         (\(f,h) -> do
-            hPutStrLn h nice >> hFlush h
+            hPutStrLn h niceCode >> hFlush h
             e <- rawSystem pager (pagerOpts ++ ["-r",  f])
             exitWith e)
 
