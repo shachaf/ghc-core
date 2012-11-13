@@ -121,7 +121,7 @@ showInPager :: FilePath -> IO ExitCode
 showInPager file = do
     mv <- getEnvMaybe "PAGER"
     let pager = fromMaybe "less" mv
-        pagerOpts = if pager == "less" then ["-f", "-r"] else []
+        pagerOpts = if pager == "less" then ["-R"] else []
     rawSystem pager (pagerOpts ++ [file])
 
 --
