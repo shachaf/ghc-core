@@ -100,22 +100,31 @@ main = do
     -- Parse command line
     (opts, args) <- getArgs >>= parseOptions
 
-    code <- case args of
-        [fp] | isExtCoreFile fp -> readFile fp
-        _ -> do
-            strs <- compileWithCore opts args
-            return (polish strs)
+    (out, err) <- case args of
+        [fp] | isExtCoreFile fp -> (\code -> (code, "")) <$> readFile fp
+        _ -> compileWithCore opts args
 
-    let niceCode | optSyntax opts = render ansiLight code []
+    let code = polish out
+        niceCode | optSyntax opts = render ansiLight code []
                  | otherwise      = code
+        final = case err of
+            "" -> niceCode
+            _  -> niceCode ++ errHeader ++ err
 
     bracket
         (openTempFile "/tmp" "ghc-core-XXXX.hcr")
         (\(f,h) -> hClose h >> removeFile f)
         (\(f,h) -> do
-            hPutStrLn h niceCode >> hFlush h
-            e <-showInPager f
+            hPutStrLn h final >> hFlush h
+            e <- showInPager f
             exitWith e)
+  where
+    errHeader =
+        "\n\n"
+     ++ "---------------------------------"
+     ++ "STDERR"
+     ++ "---------------------------------"
+     ++ "\n\n"
 
 showInPager :: FilePath -> IO ExitCode
 showInPager file = do
@@ -164,7 +173,7 @@ polish = unlines . dups . map polish' . lines
 
 ------------------------------------------------------------------------
 
-compileWithCore :: Options -> [String] -> IO String
+compileWithCore :: Options -> [String] -> IO (String, String)
 compileWithCore opts args = do
     -- TODO: Show generated assembly for -fllvm (previously implemented with
     -- -keep-tmp-files)
@@ -175,13 +184,13 @@ compileWithCore opts args = do
 
     x <- readProcessWithExitCode (optGhcExe opts) (defaultArgs ++ args) []
     case x of
-         (err@(ExitFailure _),str,std) -> do
-            mapM_ putStrLn (lines str)
-            mapM_ putStrLn (lines std)
-            hPutStrLn stderr ("GHC failed to compile " ++ show err)
+         (exit@(ExitFailure _), out, err) -> do
+            mapM_ putStrLn (lines out)
+            mapM_ putStrLn (lines err)
+            hPutStrLn stderr ("GHC failed to compile " ++ show exit)
             exitWith (ExitFailure 1) -- fatal
 
-         (ExitSuccess, str, _)      -> return str
+         (ExitSuccess, out, err)      -> return (out, err)
 
 ------------------------------------------------------------------------
 
