@@ -26,7 +26,6 @@ import Control.Applicative
 import Control.Exception as E
 import Data.Maybe
 import System.Console.GetOpt
-import System.Directory
 import System.Environment
 import System.Exit
 import System.FilePath
@@ -111,13 +110,8 @@ main = do
             "" -> niceCode
             _  -> niceCode ++ errHeader ++ err
 
-    bracket
-        (openTempFile "/tmp" "ghc-core-XXXX.hcr")
-        (\(f,h) -> hClose h >> removeFile f)
-        (\(f,h) -> do
-            hPutStrLn h final >> hFlush h
-            e <- showInPager f
-            exitWith e)
+    e <- showInPager final
+    exitWith e
   where
     errHeader =
         "\n\n"
@@ -126,12 +120,14 @@ main = do
      ++ "---------------------------------"
      ++ "\n\n"
 
-showInPager :: FilePath -> IO ExitCode
-showInPager file = do
-    mv <- getEnvMaybe "PAGER"
-    let pager = fromMaybe "less" mv
-        pagerOpts = if pager == "less" then ["-R"] else []
-    rawSystem pager (pagerOpts ++ [file])
+showInPager :: String -> IO ExitCode
+showInPager s = do
+    pager <- fromMaybe "less -R" <$> getEnvMaybe "PAGER"
+    (Just h, _out, _err, procHandle) <- createProcess (shell pager) { std_in = CreatePipe }
+    (_::Either IOException ()) <- try $ do -- The pipe might be closed early; we don't care.
+        hPutStrLn h s
+        hClose h
+    waitForProcess procHandle
 
 --
 -- Clean up the output with some regular expressions.
