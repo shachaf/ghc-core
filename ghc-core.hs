@@ -128,11 +128,11 @@ main = do
 
 showInPager :: FilePath -> IO ExitCode
 showInPager file = do
-    pager <- maybe "less -R" (addOpts . words) <$> getEnvMaybe "PAGER"
+    pager <- maybe "less -R" (maybeAddOpts . words) <$> getEnvMaybe "PAGER"
     system (pager ++ " " ++ file)
   where
-    addOpts ("less":opts) | "-R" `elem` opts = unwords ("less":opts)
-    addOpts _                                = "less -R"
+    maybeAddOpts ("less":opts) | "-R" `elem` opts = unwords ("less":opts)
+    maybeAddOpts pager                            = unwords pager
 
 --
 -- Clean up the output with some regular expressions.
