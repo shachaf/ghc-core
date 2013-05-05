@@ -32,7 +32,7 @@ import System.FilePath
 import System.IO
 import System.Process
 
-import Text.Regex.PCRE.Light.Char8
+import qualified Text.Regex.TDFA as RE
 
 -- BSD-licensed Haskell syntax highlighting, based on Programmatica
 import Language.Haskell.Colorize
@@ -193,3 +193,16 @@ compileWithCore opts args = do
 -- Safe wrapper for getEnv
 getEnvMaybe :: String -> IO (Maybe String)
 getEnvMaybe name = handle (\(_::SomeException) -> return Nothing) (Just <$> getEnv name)
+
+------------------------------------------------------------------------
+
+-- wrappers for regexp operations
+
+compile :: String -> a -> RE.Regex
+compile pat _ = RE.makeRegex pat
+
+match :: RE.Regex -> String -> a -> Maybe [String]
+match regexp s _ = fmap RE.getAllTextSubmatches (RE.matchM regexp s)
+
+ungreedy :: a
+ungreedy = error "hopefully not needed"
