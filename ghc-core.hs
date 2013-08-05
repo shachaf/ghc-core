@@ -23,7 +23,6 @@
 ------------------------------------------------------------------------
 
 import Control.Applicative
-import Control.Exception as E
 import Data.Maybe
 import System.Console.GetOpt
 import System.Environment
@@ -110,8 +109,7 @@ main = do
             "" -> niceCode
             _  -> niceCode ++ errHeader ++ err
 
-    e <- showInPager final
-    exitWith e
+    putStrLn final
   where
     errHeader =
         "\n\n"
@@ -119,15 +117,6 @@ main = do
      ++ "STDERR"
      ++ "---------------------------------"
      ++ "\n\n"
-
-showInPager :: String -> IO ExitCode
-showInPager s = do
-    pager <- fromMaybe "less -R" <$> getEnvMaybe "PAGER"
-    (Just h, _out, _err, procHandle) <- createProcess (shell pager) { std_in = CreatePipe }
-    (_::Either IOException ()) <- try $ do -- The pipe might be closed early; we don't care.
-        hPutStrLn h s
-        hClose h
-    waitForProcess procHandle
 
 --
 -- Clean up the output with some regular expressions.
@@ -187,9 +176,3 @@ compileWithCore opts args = do
             exitWith (ExitFailure 1) -- fatal
 
          (ExitSuccess, out, err)      -> return (out, err)
-
-------------------------------------------------------------------------
-
--- Safe wrapper for getEnv
-getEnvMaybe :: String -> IO (Maybe String)
-getEnvMaybe name = handle (\(_::SomeException) -> return Nothing) (Just <$> getEnv name)
